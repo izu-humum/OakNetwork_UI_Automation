@@ -52,12 +52,6 @@ const ADMIN_EMAIL = 'your-admin-email@example.com';
 const ADMIN_PASSWORD = 'your-admin-password';
 ```
 
-> Both `metamask_password.js` and `admin_credentials.js` hold sensitive values. Do not commit your real values. If you want git to ignore your local edits to these files, run:
->
-> ```bash
-> git update-index --skip-worktree scripts/metamask_password.js scripts/admin_credentials.js
-> ```
-
 ## Usage
 
 ### Run the full automation (login + create campaign)
