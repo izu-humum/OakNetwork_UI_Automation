@@ -1,0 +1,19 @@
+{
+  "name": "oaknetwork_ui_automation",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "playwright test",
+    "automation": "node scripts/run_automation.js",
+    "create-campaign": "node scripts/run_automation.js --create-campaign",
+    "chrome:debug": "\"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome\" --remote-debugging-port=9222 --user-data-dir=\"$HOME/Library/Application Support/Google/Chrome\" --profile-directory=Default"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}

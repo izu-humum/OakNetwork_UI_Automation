@@ -1,0 +1,3 @@
+const MM_PASSWORD = 'YOUR_METAMASK_PASSWORD_HERE';
+
+module.exports = { MM_PASSWORD };
