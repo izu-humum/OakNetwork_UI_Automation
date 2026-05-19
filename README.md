@@ -54,44 +54,72 @@ const ADMIN_PASSWORD = 'your-admin-password';
 
 ## Usage
 
-### Run the full automation (login + create campaign)
+### Run as Playwright tests (recommended — per-step pass/fail reports)
 
 ```bash
-npm run automation
+npm run test:flow            # run the full end-to-end flow
+npm run test:report          # open the HTML report after the run
 ```
 
-This will:
-1. Launch Chrome with your existing profile and MetaMask
-2. Navigate to the Oak Network site
-3. Log in via MetaMask (enter password, connect, confirm)
-4. Scroll briefly after login
-5. Create a new campaign with all form fields filled
-6. Wait for you to press Enter before closing the browser
+The full flow is split into four ordered tests that share one Chrome session:
 
-### Run Playwright tests
+1. `Login via MetaMask`
+2. `Create a campaign`
+3. `Admin approves campaign and it goes live`
+4. `Crypto pledge`
+
+Each test contains many sub-steps (one per button click / form field / verification). After the run:
+
+- **Terminal** (list reporter) shows pass/fail per test, e.g.:
+
+  ```
+    ✓  1. Login via MetaMask (45.2s)
+    ✓  2. Create a campaign (3m 12.6s)
+    ✗  3. Admin approves campaign and it goes live (1m 8.1s)
+       Click MetaMask "Confirm" (second signature)
+       Error: MetaMask popup not found for second confirmation.
+         at scripts/admin.js:131
+    -  4. Crypto pledge (skipped)
+  ```
+
+- **HTML report** (`npx playwright show-report`) shows the full step tree under each test, marking the exact step that failed, with screenshot, video, and trace.
+
+To run all tests (smoke + full flow):
 
 ```bash
 npm test
 ```
 
+### Run as a single CLI script (no per-step report)
+
+```bash
+npm run automation
+```
+
+Same flow, but executed as a plain Node script. Every action is logged to the terminal with `▶ name` / `✓ name` / `✗ name` markers, and the process exits non-zero on the first failed step.
+
 ## Project Structure
 
 ```
 ├── assets/
-│   ├── cover.png          # Campaign cover image
-│   ├── item.png           # Item image
-│   └── reward.png         # Reward image
+│   ├── cover.png             # Campaign cover image
+│   ├── item.png              # Item image
+│   └── reward.png            # Reward image
 ├── scripts/
-│   ├── run_automation.js     # Main automation script (login + orchestration)
-│   ├── create_campaign.js    # Campaign creation form automation
-│   ├── admin.js              # Admin panel approval automation
-│   ├── crypto_pledge.js      # Crypto pledge automation
+│   ├── step.js               # Pluggable step runner (console vs test.step)
+│   ├── browser.js            # Chrome lifecycle / CDP attach
+│   ├── login.js              # MetaMask login flow (per-step)
+│   ├── create_campaign.js    # Campaign creation flow (per-step)
+│   ├── admin.js              # Admin approval flow (per-step)
+│   ├── crypto_pledge.js      # Crypto pledge flow (per-step)
+│   ├── run_automation.js     # CLI orchestrator
 │   ├── metamask_password.js  # MetaMask password (placeholder — fill in locally)
 │   └── admin_credentials.js  # Admin email/password (placeholder — fill in locally)
 ├── tests/
-│   ├── home.spec.ts       # Home page smoke tests
-│   └── my-projects.spec.ts # My Projects page smoke tests
-├── playwright.config.ts   # Playwright test configuration
+│   ├── full_flow.spec.ts     # Full end-to-end flow as ordered tests
+│   ├── home.spec.ts          # Home page smoke tests
+│   └── my-projects.spec.ts   # My Projects page smoke tests
+├── playwright.config.ts      # Playwright test configuration
 ├── package.json
 └── .gitignore
 ```

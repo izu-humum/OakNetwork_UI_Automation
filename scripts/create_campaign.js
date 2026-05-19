@@ -1,496 +1,413 @@
 /**
  * Create Campaign automation.
- * Called from run_automation.js after login and page load.
+ * Every action is wrapped in `step(name, async () => { ... })` so the
+ * Playwright HTML report shows per-step pass/fail when called from
+ * tests, and the console runner logs every step when called from
+ * `npm run automation`.
  *
- * Usage (standalone — expects page already logged in):
+ * Usage:
  *   const { createCampaign } = require('./create_campaign');
- *   await createCampaign(page, context);
- *
- * The run_automation script calls this after login + scroll/load.
+ *   const title = await createCampaign(page, context, { step });
  */
 
 const path = require('path');
+const { resolveStep } = require('./step');
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function announceClick(buttonLabel) {
-  await sleep(2000);
-  console.log(`Clicking "${buttonLabel}" button…`);
+const ADJECTIVES = ['Bright', 'Bold', 'Creative', 'Epic', 'Grand', 'Stellar', 'Rising', 'Golden', 'Swift', 'Noble'];
+const NOUNS = ['Horizon', 'Venture', 'Vision', 'Spark', 'Journey', 'Wave', 'Summit', 'Dream', 'Forge', 'Quest'];
+const THEMES = ['Project', 'Initiative', 'Campaign', 'Movement', 'Mission', 'Launch', 'Edition', 'Chapter', 'Series', 'Collective'];
+
+function randomTitle() {
+  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+  const theme = THEMES[Math.floor(Math.random() * THEMES.length)];
+  return `${adj} ${noun} ${theme}`;
 }
 
-/**
- * Navigate to the create campaign page and start filling the form.
- * Adjust selectors below once you share the form HTML.
- */
-async function createCampaign(page, context) {
-  console.log('\n--- Create Campaign ---\n');
-
-  // Step 1: Click "Create Campaign" button
-  const createBtn = page.locator('button[data-create-btn="true"]');
-
-  await createBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await createBtn.scrollIntoViewIfNeeded();
-  await announceClick('Create Campaign');
-  await createBtn.click();
-  console.log('Clicked "Create Campaign" button.');
-
-  await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
-  await sleep(3000);
-  console.log(`On page: ${page.url()}`);
-
-  // Step 2: Fill in campaign title
-  const titleInput = page.locator('input[name="title"]');
-  await titleInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await titleInput.click();
-  await sleep(2000);
-  console.log('Typing campaign title…');
-  const adjectives = ['Bright', 'Bold', 'Creative', 'Epic', 'Grand', 'Stellar', 'Rising', 'Golden', 'Swift', 'Noble'];
-  const nouns = ['Horizon', 'Venture', 'Vision', 'Spark', 'Journey', 'Wave', 'Summit', 'Dream', 'Forge', 'Quest'];
-  const themes = ['Project', 'Initiative', 'Campaign', 'Movement', 'Mission', 'Launch', 'Edition', 'Chapter', 'Series', 'Collective'];
-  const adj = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const noun = nouns[Math.floor(Math.random() * nouns.length)];
-  const theme = themes[Math.floor(Math.random() * themes.length)];
-  const titleText = `${adj} ${noun} ${theme}`;
-  for (const char of titleText) {
-    await page.keyboard.type(char, { delay: 80 + Math.floor(Math.random() * 120) });
+async function typeHumanLike(page, text, { min = 80, jitter = 120 } = {}) {
+  for (const char of text) {
+    await page.keyboard.type(char, { delay: min + Math.floor(Math.random() * jitter) });
   }
-  console.log('Campaign title entered.');
+}
 
-  // Step 3: Fill in campaign subtitle
-  const subtitleInput = page.locator('input[name="subtitle"]');
-  await subtitleInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await subtitleInput.click();
-  await sleep(2000);
-  console.log('Typing campaign subtitle…');
-  const subtitleText = 'My Campaign Subtitle';
-  for (const char of subtitleText) {
-    await page.keyboard.type(char, { delay: 80 + Math.floor(Math.random() * 120) });
-  }
-  console.log('Campaign subtitle entered.');
+async function createCampaign(page, context, opts = {}) {
+  const step = resolveStep(opts);
+  const titleText = randomTitle();
 
-  // Step 4: Select a category from the dropdown
-  const categorySelect = page.locator('select[name="category"]');
-  await categorySelect.waitFor({ state: 'visible', timeout: 15_000 });
-  await sleep(2000);
-  console.log('Selecting category…');
-  await categorySelect.selectOption({ index: 1 + Math.floor(Math.random() * 10) });
-  const selectedCategory = await categorySelect.locator('option:checked').textContent();
-  console.log(`Selected category: "${selectedCategory}".`);
+  await step('Click "Create Campaign" button (header)', async () => {
+    const createBtn = page.locator('button[data-create-btn="true"]');
+    await createBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await createBtn.scrollIntoViewIfNeeded();
+    await createBtn.click();
+    await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
+    await sleep(3000);
+  });
 
-  // Step 5: Type location one character at a time like a human
-  const locationInput = page.locator('input[name="location"]');
-  await locationInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await locationInput.click();
-  await sleep(1000);
-  console.log('Typing location…');
-  const locationText = 'Dhaka';
-  for (const char of locationText) {
-    await page.keyboard.type(char, { delay: 80 + Math.floor(Math.random() * 120) });
-  }
-  console.log(`Location entered: "${locationText}".`);
+  await step('Fill campaign title', async () => {
+    const titleInput = page.locator('input[name="title"]');
+    await titleInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await titleInput.click();
+    await sleep(500);
+    await typeHumanLike(page, titleText);
+  });
 
-  // Step 6: Upload cover image
-  const dropzone = page.locator('.chakra-file-upload__dropzone');
-  await dropzone.waitFor({ state: 'visible', timeout: 15_000 });
-  await dropzone.scrollIntoViewIfNeeded();
-  await sleep(2000);
-  console.log('Uploading cover image…');
+  await step('Fill campaign subtitle', async () => {
+    const subtitleInput = page.locator('input[name="subtitle"]');
+    await subtitleInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await subtitleInput.click();
+    await sleep(500);
+    await typeHumanLike(page, 'My Campaign Subtitle');
+  });
 
-  const coverPath = path.resolve(__dirname, '..', 'assets', 'cover.png');
-  const [fileChooser] = await Promise.all([
-    page.waitForEvent('filechooser', { timeout: 10_000 }),
-    dropzone.click(),
-  ]);
-  await fileChooser.setFiles(coverPath);
-  await sleep(3000);
-  console.log(`Cover image uploaded: ${coverPath}`);
+  await step('Select random category from dropdown', async () => {
+    const categorySelect = page.locator('select[name="category"]');
+    await categorySelect.waitFor({ state: 'visible', timeout: 15_000 });
+    await categorySelect.selectOption({ index: 1 + Math.floor(Math.random() * 10) });
+  });
 
-  // Step 7: Insert cover video link one character at a time
-  const videoInput = page.locator('input[name="projectVideoUrl"]');
-  await videoInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await videoInput.scrollIntoViewIfNeeded();
-  await videoInput.click();
-  await sleep(1000);
-  console.log('Typing cover video URL…');
-  const videoUrl = 'https://www.youtube.com/watch?v=DGnH8MfyTf0';
-  for (const char of videoUrl) {
-    await page.keyboard.type(char, { delay: 40 + Math.floor(Math.random() * 60) });
-  }
-  console.log(`Cover video URL entered: "${videoUrl}".`);
+  await step('Fill location field', async () => {
+    const locationInput = page.locator('input[name="location"]');
+    await locationInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await locationInput.click();
+    await sleep(500);
+    await typeHumanLike(page, 'Dhaka');
+  });
 
-  // Step 8: Enter goal amount
-  const goalInput = page.locator('input.chakra-number-input__input[placeholder="Enter goal amount"]');
-  await goalInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await goalInput.scrollIntoViewIfNeeded();
-  await goalInput.click();
-  await sleep(1000);
-  console.log('Entering goal amount…');
-  await page.keyboard.type('0', { delay: 100 });
-  console.log('Goal amount entered: 0.');
+  await step('Upload cover image', async () => {
+    const dropzone = page.locator('.chakra-file-upload__dropzone');
+    await dropzone.waitFor({ state: 'visible', timeout: 15_000 });
+    await dropzone.scrollIntoViewIfNeeded();
+    await sleep(500);
 
-  // Step 9: Enter campaign duration (clear existing value first)
-  const durationInput = page.locator('input.chakra-number-input__input[placeholder="30 days"]');
-  await durationInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await durationInput.scrollIntoViewIfNeeded();
-  await durationInput.click({ clickCount: 3 });
-  await sleep(500);
-  await page.keyboard.press('Backspace');
-  await sleep(1000);
-  console.log('Entering campaign duration…');
-  await page.keyboard.type('1', { delay: 100 });
-  console.log('Campaign duration entered: 1 day.');
+    const coverPath = path.resolve(__dirname, '..', 'assets', 'cover.png');
+    const [fileChooser] = await Promise.all([
+      page.waitForEvent('filechooser', { timeout: 10_000 }),
+      dropzone.click(),
+    ]);
+    await fileChooser.setFiles(coverPath);
+    await sleep(3000);
+  });
 
-  // Step 10: Click "Next: Items" button
-  const nextItemsBtn = page.locator('button[type="submit"]').filter({ hasText: /next:\s*items/i });
-  await nextItemsBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await nextItemsBtn.scrollIntoViewIfNeeded();
-  await announceClick('Next: Items');
-  await nextItemsBtn.click();
-  console.log('Clicked "Next: Items" button.');
+  await step('Fill cover video URL', async () => {
+    const videoInput = page.locator('input[name="projectVideoUrl"]');
+    await videoInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await videoInput.scrollIntoViewIfNeeded();
+    await videoInput.click();
+    await sleep(500);
+    await typeHumanLike(page, 'https://www.youtube.com/watch?v=DGnH8MfyTf0', { min: 40, jitter: 60 });
+  });
 
-  await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
-  await sleep(3000);
-  console.log(`On page: ${page.url()}`);
+  await step('Enter goal amount', async () => {
+    const goalInput = page.locator('input.chakra-number-input__input[placeholder="Enter goal amount"]');
+    await goalInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await goalInput.scrollIntoViewIfNeeded();
+    await goalInput.click();
+    await sleep(500);
+    await page.keyboard.type('0', { delay: 100 });
+  });
 
-  // Step 11: Click "Add New Item" button
-  const addNewItemBtn = page.getByRole('button', { name: /add new item/i });
-  await addNewItemBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await addNewItemBtn.scrollIntoViewIfNeeded();
-  await announceClick('Add New Item');
-  await addNewItemBtn.click();
-  console.log('Clicked "Add New Item" button.');
-  await sleep(3000);
+  await step('Enter campaign duration (1 day)', async () => {
+    const durationInput = page.locator('input.chakra-number-input__input[placeholder="30 days"]');
+    await durationInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await durationInput.scrollIntoViewIfNeeded();
+    await durationInput.click({ clickCount: 3 });
+    await sleep(300);
+    await page.keyboard.press('Backspace');
+    await sleep(500);
+    await page.keyboard.type('1', { delay: 100 });
+  });
 
-  // Step 12: Enter item title
-  const itemTitleInput = page.locator('input[name="name"]');
-  await itemTitleInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await itemTitleInput.click();
-  await sleep(1000);
-  console.log('Typing item title…');
-  const itemTitleText = 'My Item Title';
-  for (const char of itemTitleText) {
-    await page.keyboard.type(char, { delay: 80 + Math.floor(Math.random() * 120) });
-  }
-  console.log('Item title entered.');
+  await step('Click "Next: Items" button', async () => {
+    const nextItemsBtn = page.locator('button[type="submit"]').filter({ hasText: /next:\s*items/i });
+    await nextItemsBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await nextItemsBtn.scrollIntoViewIfNeeded();
+    await nextItemsBtn.click();
+    await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
+    await sleep(3000);
+  });
 
-  // Step 13: Upload item image
-  const itemDropzone = page.locator('#file\\:_r_t_\\:dropzone');
-  await itemDropzone.waitFor({ state: 'visible', timeout: 15_000 });
-  await itemDropzone.scrollIntoViewIfNeeded();
-  await sleep(2000);
-  console.log('Uploading item image…');
+  await step('Click "Add New Item" button', async () => {
+    const addNewItemBtn = page.getByRole('button', { name: /add new item/i });
+    await addNewItemBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await addNewItemBtn.scrollIntoViewIfNeeded();
+    await addNewItemBtn.click();
+    await sleep(3000);
+  });
 
-  const itemImagePath = path.resolve(__dirname, '..', 'assets', 'item.png');
-  const [itemFileChooser] = await Promise.all([
-    page.waitForEvent('filechooser', { timeout: 10_000 }),
-    itemDropzone.click(),
-  ]);
-  await itemFileChooser.setFiles(itemImagePath);
-  await sleep(3000);
-  console.log(`Item image uploaded: ${itemImagePath}`);
+  await step('Fill item title', async () => {
+    const itemTitleInput = page.locator('input[name="name"]');
+    await itemTitleInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await itemTitleInput.click();
+    await sleep(500);
+    await typeHumanLike(page, 'My Item Title');
+  });
 
-  // Step 14: Click "Save" button
-  const saveBtn = page.locator('button[type="submit"]').filter({ hasText: /save/i });
-  await saveBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await saveBtn.scrollIntoViewIfNeeded();
-  await announceClick('Save');
-  await saveBtn.click();
-  console.log('Clicked "Save" button.');
-  await sleep(3000);
-  console.log('Item saved.');
+  await step('Upload item image', async () => {
+    const itemDropzone = page.locator('#file\\:_r_t_\\:dropzone');
+    await itemDropzone.waitFor({ state: 'visible', timeout: 15_000 });
+    await itemDropzone.scrollIntoViewIfNeeded();
+    await sleep(500);
 
-  // Step 15: Click "Next: Rewards" button
-  const nextRewardsBtn = page.locator('button[type="submit"]').filter({ hasText: /next:\s*rewards/i });
-  await nextRewardsBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await nextRewardsBtn.scrollIntoViewIfNeeded();
-  await announceClick('Next: Rewards');
-  await nextRewardsBtn.click();
-  console.log('Clicked "Next: Rewards" button.');
+    const itemImagePath = path.resolve(__dirname, '..', 'assets', 'item.png');
+    const [itemFileChooser] = await Promise.all([
+      page.waitForEvent('filechooser', { timeout: 10_000 }),
+      itemDropzone.click(),
+    ]);
+    await itemFileChooser.setFiles(itemImagePath);
+    await sleep(3000);
+  });
 
-  await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
-  await sleep(3000);
-  console.log(`On page: ${page.url()}`);
+  await step('Click "Save" button (item)', async () => {
+    const saveBtn = page.locator('button[type="submit"]').filter({ hasText: /save/i });
+    await saveBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await saveBtn.scrollIntoViewIfNeeded();
+    await saveBtn.click();
+    await sleep(3000);
+  });
 
-  // Step 16: Click "Add New Reward" button
-  const addNewRewardBtn = page.getByRole('button', { name: /add new reward/i });
-  await addNewRewardBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await addNewRewardBtn.scrollIntoViewIfNeeded();
-  await announceClick('Add New Reward');
-  await addNewRewardBtn.click();
-  console.log('Clicked "Add New Reward" button.');
-  await sleep(3000);
+  await step('Click "Next: Rewards" button', async () => {
+    const nextRewardsBtn = page.locator('button[type="submit"]').filter({ hasText: /next:\s*rewards/i });
+    await nextRewardsBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await nextRewardsBtn.scrollIntoViewIfNeeded();
+    await nextRewardsBtn.click();
+    await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
+    await sleep(3000);
+  });
 
-  // Step 17: Enter reward title
-  const rewardTitleInput = page.locator('input[name="name"]');
-  await rewardTitleInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await rewardTitleInput.click();
-  await sleep(1000);
-  console.log('Typing reward title…');
-  const rewardTitleText = 'Gold Trophy Reward';
-  for (const char of rewardTitleText) {
-    await page.keyboard.type(char, { delay: 80 + Math.floor(Math.random() * 120) });
-  }
-  console.log('Reward title entered.');
+  await step('Click "Add New Reward" button', async () => {
+    const addNewRewardBtn = page.getByRole('button', { name: /add new reward/i });
+    await addNewRewardBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await addNewRewardBtn.scrollIntoViewIfNeeded();
+    await addNewRewardBtn.click();
+    await sleep(3000);
+  });
 
-  // Step 18: Enter reward description
-  const rewardDescInput = page.locator('input[name="description"]');
-  await rewardDescInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await rewardDescInput.click();
-  await sleep(1000);
-  console.log('Typing reward description…');
-  const rewardDescText = 'Get an exclusive gold trophy for your early support!';
-  for (const char of rewardDescText) {
-    await page.keyboard.type(char, { delay: 60 + Math.floor(Math.random() * 100) });
-  }
-  console.log('Reward description entered.');
+  await step('Fill reward title', async () => {
+    const rewardTitleInput = page.locator('input[name="name"]');
+    await rewardTitleInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await rewardTitleInput.click();
+    await sleep(500);
+    await typeHumanLike(page, 'Gold Trophy Reward');
+  });
 
-  // Step 19: Upload reward image
-  const rewardDropzone = page.locator('#file\\:_r_19_\\:dropzone');
-  await rewardDropzone.waitFor({ state: 'visible', timeout: 15_000 });
-  await rewardDropzone.scrollIntoViewIfNeeded();
-  await sleep(2000);
-  console.log('Uploading reward image…');
+  await step('Fill reward description', async () => {
+    const rewardDescInput = page.locator('input[name="description"]');
+    await rewardDescInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await rewardDescInput.click();
+    await sleep(500);
+    await typeHumanLike(page, 'Get an exclusive gold trophy for your early support!', { min: 60, jitter: 100 });
+  });
 
-  const rewardImagePath = path.resolve(__dirname, '..', 'assets', 'reward.png');
-  const [rewardFileChooser] = await Promise.all([
-    page.waitForEvent('filechooser', { timeout: 10_000 }),
-    rewardDropzone.click(),
-  ]);
-  await rewardFileChooser.setFiles(rewardImagePath);
-  await sleep(3000);
-  console.log(`Reward image uploaded: ${rewardImagePath}`);
+  await step('Upload reward image', async () => {
+    const rewardDropzone = page.locator('#file\\:_r_19_\\:dropzone');
+    await rewardDropzone.waitFor({ state: 'visible', timeout: 15_000 });
+    await rewardDropzone.scrollIntoViewIfNeeded();
+    await sleep(500);
 
-  // Step 20: Enter pricing (1)
-  const pricingInput = page.locator('input[name="value"]');
-  await pricingInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await pricingInput.scrollIntoViewIfNeeded();
-  await pricingInput.click();
-  await sleep(1000);
-  console.log('Entering reward price…');
-  await page.keyboard.type('1', { delay: 100 });
-  console.log('Reward price entered: 1.');
+    const rewardImagePath = path.resolve(__dirname, '..', 'assets', 'reward.png');
+    const [rewardFileChooser] = await Promise.all([
+      page.waitForEvent('filechooser', { timeout: 10_000 }),
+      rewardDropzone.click(),
+    ]);
+    await rewardFileChooser.setFiles(rewardImagePath);
+    await sleep(3000);
+  });
 
-  // Step 21: Enter quantity (100)
-  const quantityInput = page.locator('input[name="rewardQuantity"]');
-  await quantityInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await quantityInput.scrollIntoViewIfNeeded();
-  await quantityInput.click();
-  await sleep(1000);
-  console.log('Entering reward quantity…');
-  const quantityText = '100';
-  for (const char of quantityText) {
-    await page.keyboard.type(char, { delay: 80 + Math.floor(Math.random() * 100) });
-  }
-  console.log('Reward quantity entered: 100.');
+  await step('Enter reward price (1)', async () => {
+    const pricingInput = page.locator('input[name="value"]');
+    await pricingInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await pricingInput.scrollIntoViewIfNeeded();
+    await pricingInput.click();
+    await sleep(500);
+    await page.keyboard.type('1', { delay: 100 });
+  });
 
-  // Step 22: Select an item from the Item dropdown
-  await sleep(2000);
-  const itemSelect = page.locator('select').filter({ has: page.locator('option') }).last();
-  await itemSelect.scrollIntoViewIfNeeded();
-  await announceClick('Item dropdown');
-  await itemSelect.selectOption({ index: 1 });
-  const selectedItem = await itemSelect.locator('option:checked').textContent();
-  console.log(`Selected item: "${selectedItem}".`);
+  await step('Enter reward quantity (100)', async () => {
+    const quantityInput = page.locator('input[name="rewardQuantity"]');
+    await quantityInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await quantityInput.scrollIntoViewIfNeeded();
+    await quantityInput.click();
+    await sleep(500);
+    await typeHumanLike(page, '100');
+  });
 
-  // Step 23: Set Estimated Delivery — click the date input to open calendar
-  await sleep(2000);
-  const dateInput = page.locator('input[placeholder="YYYY-MM-DD"]').first();
-  await dateInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await dateInput.scrollIntoViewIfNeeded();
-  await announceClick('Estimated Delivery date input');
-  await dateInput.click();
-  await sleep(2000);
+  await step('Select item from Item dropdown', async () => {
+    await sleep(2000);
+    const itemSelect = page.locator('select').filter({ has: page.locator('option') }).last();
+    await itemSelect.scrollIntoViewIfNeeded();
+    await itemSelect.selectOption({ index: 1 });
+  });
 
-  // Wait for the calendar popover to appear
-  const calendarPopover = page.locator('.chakra-popover__content .rdp-root');
-  await calendarPopover.waitFor({ state: 'visible', timeout: 10_000 });
-  console.log('Calendar popover opened.');
+  await step('Pick Estimated Delivery date (last available in calendar)', async () => {
+    await sleep(2000);
+    const dateInput = page.locator('input[placeholder="YYYY-MM-DD"]').first();
+    await dateInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await dateInput.scrollIntoViewIfNeeded();
+    await dateInput.click();
+    await sleep(2000);
 
-  // Click the last available (non-disabled) day in the calendar
-  const availableDays = calendarPopover.locator('.rdp-day:not(.rdp-disabled):not(.rdp-hidden) .rdp-day_button');
-  const dayCount = await availableDays.count();
-  const lastDayBtn = availableDays.nth(dayCount - 1);
-  const dayLabel = await lastDayBtn.getAttribute('aria-label');
-  await announceClick(dayLabel || 'Last available date');
-  await lastDayBtn.click();
-  console.log(`Estimated delivery date selected: ${dayLabel || 'last available date'}.`);
-  await sleep(2000);
+    const calendarPopover = page.locator('.chakra-popover__content .rdp-root');
+    await calendarPopover.waitFor({ state: 'visible', timeout: 10_000 });
 
-  // Step 24: Select "Digital Reward" shipping method (radio button)
-  const digitalRewardRadio = page.getByText(/digital reward/i);
-  await digitalRewardRadio.waitFor({ state: 'visible', timeout: 15_000 });
-  await digitalRewardRadio.scrollIntoViewIfNeeded();
-  await announceClick('Digital Reward');
-  await digitalRewardRadio.click();
-  console.log('Selected "Digital Reward" shipping method.');
+    const availableDays = calendarPopover.locator('.rdp-day:not(.rdp-disabled):not(.rdp-hidden) .rdp-day_button');
+    const dayCount = await availableDays.count();
+    const lastDayBtn = availableDays.nth(dayCount - 1);
+    await lastDayBtn.click();
+    await sleep(2000);
+  });
 
-  // Step 25: Click "Save" button for the reward
-  await sleep(2000);
-  const saveRewardBtn = page.locator('button[type="submit"]').filter({ hasText: /save/i });
-  await saveRewardBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await saveRewardBtn.scrollIntoViewIfNeeded();
-  await announceClick('Save');
-  await saveRewardBtn.click();
-  console.log('Clicked "Save" button. Reward saved.');
-  await sleep(3000);
+  await step('Select "Digital Reward" shipping method', async () => {
+    const digitalRewardRadio = page.getByText(/digital reward/i);
+    await digitalRewardRadio.waitFor({ state: 'visible', timeout: 15_000 });
+    await digitalRewardRadio.scrollIntoViewIfNeeded();
+    await digitalRewardRadio.click();
+  });
 
-  // Step 26: Click "Next: Story" button
-  const nextStoryBtn = page.locator('button[type="submit"]').filter({ hasText: /next:\s*story/i });
-  await nextStoryBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await nextStoryBtn.scrollIntoViewIfNeeded();
-  await announceClick('Next: Story');
-  await nextStoryBtn.click();
-  console.log('Clicked "Next: Story" button.');
+  await step('Click "Save" button (reward)', async () => {
+    await sleep(2000);
+    const saveRewardBtn = page.locator('button[type="submit"]').filter({ hasText: /save/i });
+    await saveRewardBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await saveRewardBtn.scrollIntoViewIfNeeded();
+    await saveRewardBtn.click();
+    await sleep(3000);
+  });
 
-  await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
-  await sleep(3000);
-  console.log(`On page: ${page.url()}`);
+  await step('Click "Next: Story" button', async () => {
+    const nextStoryBtn = page.locator('button[type="submit"]').filter({ hasText: /next:\s*story/i });
+    await nextStoryBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await nextStoryBtn.scrollIntoViewIfNeeded();
+    await nextStoryBtn.click();
+    await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
+    await sleep(3000);
+  });
 
-  // Step 27: Insert campaign story in the Quill editor
-  const quillEditor = page.locator('.ql-editor[contenteditable="true"]').first();
-  await quillEditor.waitFor({ state: 'visible', timeout: 15_000 });
-  await quillEditor.click();
-  await sleep(1000);
-  console.log('Typing campaign story…');
-  const storyText = 'This campaign is dedicated to bringing innovative ideas to life. We believe in the power of community-driven projects and aim to deliver exceptional value to our supporters. Join us on this exciting journey and help us make a difference!';
-  for (const char of storyText) {
-    await page.keyboard.type(char, { delay: 30 + Math.floor(Math.random() * 50) });
-  }
-  console.log('Campaign story entered.');
-
-  // Step 28: Insert risks and challenges
-  const risksTextarea = page.locator('textarea[name="risks"]');
-  await risksTextarea.waitFor({ state: 'visible', timeout: 15_000 });
-  await risksTextarea.scrollIntoViewIfNeeded();
-  await risksTextarea.click();
-  await sleep(1000);
-  console.log('Typing risks and challenges…');
-  const risksText = 'As with any project, there are inherent risks including potential delays in production timelines and budget constraints. We have planned contingencies and will keep backers informed every step of the way to ensure transparency and accountability.';
-  for (const char of risksText) {
-    await page.keyboard.type(char, { delay: 30 + Math.floor(Math.random() * 50) });
-  }
-  console.log('Risks and challenges entered.');
-
-  // Step 29: Insert FAQ question
-  const faqQuestionInput = page.locator('input[placeholder="Write your question here..."]');
-  await faqQuestionInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await faqQuestionInput.scrollIntoViewIfNeeded();
-  await faqQuestionInput.click();
-  await sleep(1000);
-  console.log('Typing FAQ question…');
-  const faqQuestion = 'When will I receive my reward?';
-  for (const char of faqQuestion) {
-    await page.keyboard.type(char, { delay: 80 + Math.floor(Math.random() * 120) });
-  }
-  console.log('FAQ question entered.');
-
-  // Step 30: Insert FAQ answer
-  const faqAnswerTextarea = page.locator('textarea[placeholder="Write your answer here..."]');
-  await faqAnswerTextarea.waitFor({ state: 'visible', timeout: 15_000 });
-  await faqAnswerTextarea.scrollIntoViewIfNeeded();
-  await faqAnswerTextarea.click();
-  await sleep(1000);
-  console.log('Typing FAQ answer…');
-  const faqAnswer = 'Rewards will be delivered within 30 days after the campaign ends. We will provide tracking information and updates throughout the fulfillment process.';
-  for (const char of faqAnswer) {
-    await page.keyboard.type(char, { delay: 30 + Math.floor(Math.random() * 50) });
-  }
-  console.log('FAQ answer entered.');
-
-  // Step 31: Click "+ Add FAQ" button to save the FAQ
-  const addFaqBtn = page.getByRole('button', { name: /add faq/i });
-  await addFaqBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await addFaqBtn.scrollIntoViewIfNeeded();
-  await announceClick('+ Add FAQ');
-  await addFaqBtn.click();
-  console.log('Clicked "+ Add FAQ" button. FAQ saved.');
-  await sleep(3000);
-
-  // Step 32: Click "Next: Preview" button
-  const nextPreviewBtn = page.locator('button[type="submit"]').filter({ hasText: /next:\s*preview/i });
-  await nextPreviewBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await nextPreviewBtn.scrollIntoViewIfNeeded();
-  await announceClick('Next: Preview');
-  await nextPreviewBtn.click();
-  console.log('Clicked "Next: Preview" button.');
-
-  await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
-  await sleep(3000);
-  console.log(`On page: ${page.url()}`);
-
-  // Step 33: Scroll to the bottom of the preview page
-  console.log('Scrolling to bottom of preview page…');
-  for (let i = 0; i < 10; i++) {
-    await page.keyboard.press('PageDown');
-    await sleep(800);
-    const atBottom = await page.evaluate(() =>
-      window.innerHeight + window.scrollY >= document.body.scrollHeight - 10
+  await step('Fill campaign story (Quill editor)', async () => {
+    const quillEditor = page.locator('.ql-editor[contenteditable="true"]').first();
+    await quillEditor.waitFor({ state: 'visible', timeout: 15_000 });
+    await quillEditor.click();
+    await sleep(500);
+    await typeHumanLike(
+      page,
+      'This campaign is dedicated to bringing innovative ideas to life. We believe in the power of community-driven projects and aim to deliver exceptional value to our supporters. Join us on this exciting journey and help us make a difference!',
+      { min: 30, jitter: 50 }
     );
-    if (atBottom) break;
-  }
-  await sleep(2000);
+  });
 
-  // Step 34: Click "Next: Request approval" button
-  const nextApprovalBtn = page.locator('button[type="submit"]').filter({ hasText: /next:\s*request approval/i });
-  await nextApprovalBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await nextApprovalBtn.scrollIntoViewIfNeeded();
-  await announceClick('Next: Request approval');
-  await nextApprovalBtn.click();
-  console.log('Clicked "Next: Request approval" button.');
+  await step('Fill risks and challenges', async () => {
+    const risksTextarea = page.locator('textarea[name="risks"]');
+    await risksTextarea.waitFor({ state: 'visible', timeout: 15_000 });
+    await risksTextarea.scrollIntoViewIfNeeded();
+    await risksTextarea.click();
+    await sleep(500);
+    await typeHumanLike(
+      page,
+      'As with any project, there are inherent risks including potential delays in production timelines and budget constraints. We have planned contingencies and will keep backers informed every step of the way to ensure transparency and accountability.',
+      { min: 30, jitter: 50 }
+    );
+  });
 
-  await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
-  await sleep(3000);
-  console.log(`On page: ${page.url()}`);
+  await step('Fill FAQ question', async () => {
+    const faqQuestionInput = page.locator('input[placeholder="Write your question here..."]');
+    await faqQuestionInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await faqQuestionInput.scrollIntoViewIfNeeded();
+    await faqQuestionInput.click();
+    await sleep(500);
+    await typeHumanLike(page, 'When will I receive my reward?');
+  });
 
-  // Step 35: Enter phone number as contact information
-  const phoneInput = page.locator('input[name="phone"]');
-  await phoneInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await phoneInput.scrollIntoViewIfNeeded();
-  await phoneInput.click({ clickCount: 3 });
-  await sleep(500);
-  await page.keyboard.press('Backspace');
-  await sleep(1000);
-  console.log('Typing phone number…');
-  const phoneNumber = '1234567';
-  for (const char of phoneNumber) {
-    await page.keyboard.type(char, { delay: 80 + Math.floor(Math.random() * 120) });
-  }
-  console.log('Phone number entered: 1234567.');
+  await step('Fill FAQ answer', async () => {
+    const faqAnswerTextarea = page.locator('textarea[placeholder="Write your answer here..."]');
+    await faqAnswerTextarea.waitFor({ state: 'visible', timeout: 15_000 });
+    await faqAnswerTextarea.scrollIntoViewIfNeeded();
+    await faqAnswerTextarea.click();
+    await sleep(500);
+    await typeHumanLike(
+      page,
+      'Rewards will be delivered within 30 days after the campaign ends. We will provide tracking information and updates throughout the fulfillment process.',
+      { min: 30, jitter: 50 }
+    );
+  });
 
-  // Step 36: Click "SUBMIT" button
-  const submitBtn = page.getByRole('button', { name: /submit/i });
-  await submitBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await submitBtn.scrollIntoViewIfNeeded();
-  await announceClick('SUBMIT');
-  await submitBtn.click();
-  console.log('Clicked "SUBMIT" button.');
-  await sleep(3000);
-  console.log('Campaign submitted for approval!');
+  await step('Click "+ Add FAQ" button', async () => {
+    const addFaqBtn = page.getByRole('button', { name: /add faq/i });
+    await addFaqBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await addFaqBtn.scrollIntoViewIfNeeded();
+    await addFaqBtn.click();
+    await sleep(3000);
+  });
 
-  // Step 37: Wait for "Submission Received!" modal and click "DONE"
-  const submissionModal = page.getByText('Submission Received!');
-  await submissionModal.waitFor({ state: 'visible', timeout: 30_000 });
-  console.log('Submission Received modal appeared.');
+  await step('Click "Next: Preview" button', async () => {
+    const nextPreviewBtn = page.locator('button[type="submit"]').filter({ hasText: /next:\s*preview/i });
+    await nextPreviewBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await nextPreviewBtn.scrollIntoViewIfNeeded();
+    await nextPreviewBtn.click();
+    await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
+    await sleep(3000);
+  });
 
-  const doneBtn = page.getByRole('button', { name: /done/i });
-  await doneBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await announceClick('DONE');
-  await doneBtn.click();
-  console.log('Clicked "DONE" button. Campaign creation complete!');
-  await sleep(5000);
+  await step('Scroll preview page to bottom', async () => {
+    for (let i = 0; i < 10; i++) {
+      await page.keyboard.press('PageDown');
+      await sleep(800);
+      const atBottom = await page.evaluate(
+        () => window.innerHeight + window.scrollY >= document.body.scrollHeight - 10
+      );
+      if (atBottom) break;
+    }
+    await sleep(2000);
+  });
 
-  // Step 38: Verify campaign is "In review" on the description page
-  const inReviewBadge = page.locator('.chakra-badge').filter({ hasText: /in review/i });
-  const isInReview = await inReviewBadge.isVisible({ timeout: 15_000 }).catch(() => false);
-  if (isInReview) {
-    console.log('Campaign status: "In review" — confirmed on campaign description page.');
-  } else {
-    console.log('Campaign description page loaded but "In review" badge not found.');
-  }
-  console.log(`Final page: ${page.url()}`);
-  console.log('\n--- Create Campaign Complete ---\n');
+  await step('Click "Next: Request approval" button', async () => {
+    const nextApprovalBtn = page.locator('button[type="submit"]').filter({ hasText: /next:\s*request approval/i });
+    await nextApprovalBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await nextApprovalBtn.scrollIntoViewIfNeeded();
+    await nextApprovalBtn.click();
+    await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
+    await sleep(3000);
+  });
+
+  await step('Fill contact phone number', async () => {
+    const phoneInput = page.locator('input[name="phone"]');
+    await phoneInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await phoneInput.scrollIntoViewIfNeeded();
+    await phoneInput.click({ clickCount: 3 });
+    await sleep(300);
+    await page.keyboard.press('Backspace');
+    await sleep(500);
+    await typeHumanLike(page, '1234567');
+  });
+
+  await step('Click "SUBMIT" button', async () => {
+    const submitBtn = page.getByRole('button', { name: /submit/i });
+    await submitBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await submitBtn.scrollIntoViewIfNeeded();
+    await submitBtn.click();
+    await sleep(3000);
+  });
+
+  await step('Wait for "Submission Received!" modal', async () => {
+    const submissionModal = page.getByText('Submission Received!');
+    await submissionModal.waitFor({ state: 'visible', timeout: 30_000 });
+  });
+
+  await step('Click "DONE" button on submission modal', async () => {
+    const doneBtn = page.getByRole('button', { name: /done/i });
+    await doneBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await doneBtn.click();
+    await sleep(5000);
+  });
+
+  await step('Verify campaign status is "In review"', async () => {
+    const inReviewBadge = page.locator('.chakra-badge').filter({ hasText: /in review/i });
+    const isInReview = await inReviewBadge.isVisible({ timeout: 15_000 }).catch(() => false);
+    if (!isInReview) {
+      throw new Error('"In review" badge not visible after campaign submission.');
+    }
+  });
 
   return titleText;
 }

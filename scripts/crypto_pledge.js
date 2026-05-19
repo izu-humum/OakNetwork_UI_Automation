@@ -1,30 +1,34 @@
 /**
  * Crypto Pledge automation.
- * Called from run_automation.js after admin approval and campaign goes live.
+ *
+ * Every action is wrapped in `step(name, async () => { ... })` for
+ * per-step reporting in the Playwright HTML report.
  *
  * Usage:
  *   const { cryptoPledge } = require('./crypto_pledge');
- *   await cryptoPledge(page, context, campaignTitle);
+ *   await cryptoPledge(page, context, campaignTitle, { step });
  */
 
 const { MM_PASSWORD } = require('./metamask_password');
+const { resolveStep } = require('./step');
 
 const HOME_URL = 'https://app-dev.oaknetwork.org';
 const MAX_PLEDGE_ATTEMPTS = 3;
+const PLEDGE_AMOUNT = '0.1';
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function announceClick(buttonLabel) {
-  await sleep(2000);
-  console.log(`Clicking "${buttonLabel}" button…`);
+async function typeHumanLike(page, text, { min = 80, jitter = 120 } = {}) {
+  for (const char of text) {
+    await page.keyboard.type(char, { delay: min + Math.floor(Math.random() * jitter) });
+  }
 }
 
 async function findMetaMaskPage(context) {
   if (!context) return null;
   await sleep(2000);
-
   for (let attempt = 0; attempt < 10; attempt++) {
     const pages = context.pages();
     const mm = pages.find(
@@ -37,7 +41,7 @@ async function findMetaMaskPage(context) {
         await mm.waitForLoadState('domcontentloaded').catch(() => {});
         return mm;
       } catch {
-        // page might be navigating, retry
+        // retry
       }
     }
     await sleep(1000);
@@ -45,284 +49,250 @@ async function findMetaMaskPage(context) {
   return null;
 }
 
-async function goHomeSearchAndOpenCampaign(page, campaignTitle) {
-  console.log(`Navigating to ${HOME_URL}…`);
-  await page.goto(HOME_URL, { waitUntil: 'load', timeout: 60_000 });
-  await sleep(3000);
-
-  const searchInput = page.locator('input[name="searchString"]');
-  await searchInput.waitFor({ state: 'visible', timeout: 15_000 });
-  await searchInput.click({ clickCount: 3 });
-  await sleep(500);
-  await page.keyboard.press('Backspace');
-  await sleep(500);
-  console.log(`Searching for campaign: "${campaignTitle}"…`);
-  for (const char of campaignTitle) {
-    await page.keyboard.type(char, { delay: 80 + Math.floor(Math.random() * 120) });
-  }
-  await sleep(3000);
-
-  const campaignCard = page.locator('a').filter({ hasText: campaignTitle }).first();
-  await campaignCard.waitFor({ state: 'visible', timeout: 20_000 });
-  await announceClick(campaignTitle);
-  await campaignCard.click();
-  console.log(`Clicked on campaign: "${campaignTitle}".`);
-
-  await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
-  await sleep(3000);
-  console.log(`On page: ${page.url()}`);
-}
-
-function pledgeNoRewardConfirmUrl(projectId) {
-  return `${HOME_URL}/backer/projects/${projectId}/pledge/no-reward/confirm?amount=0.1`;
-}
-
-/**
- * Confirm page: backer fields → payment → checkbox → Confirm Pledge → MetaMask → "Pledge Confirmed".
- */
-async function runPledgeCheckoutFlow(page, context) {
-  const nameInput = page.locator('input[name="name"]');
-  const phoneInput = page.locator('input[name="phoneNumber"]');
-  const emailInput = page.locator('input[name="email"]');
-
-  const nameVal = await nameInput.inputValue().catch(() => '');
-  const phoneVal = await phoneInput.inputValue().catch(() => '');
-  const emailVal = await emailInput.inputValue().catch(() => '');
-
-  console.log(`Backer Name: ${nameVal || '(empty)'}`);
-  console.log(`Backer Phone: ${phoneVal || '(empty)'}`);
-  console.log(`Backer Email: ${emailVal || '(empty)'}`);
-
-  const paymentDropdown = page.getByText('Select payment method');
-  await paymentDropdown.waitFor({ state: 'visible', timeout: 15_000 });
-  await paymentDropdown.scrollIntoViewIfNeeded();
-  await announceClick('Select payment method');
-  await paymentDropdown.click();
-  await sleep(2000);
-
-  const cryptoOption = page.getByText('Crypto Wallet');
-  await cryptoOption.waitFor({ state: 'visible', timeout: 10_000 });
-  await announceClick('Crypto Wallet');
-  await cryptoOption.click();
-  console.log('Selected "Crypto Wallet" as payment method.');
-  await sleep(2000);
-
-  const checkbox = page.locator('svg[data-state="unchecked"]').first();
-  await checkbox.waitFor({ state: 'visible', timeout: 15_000 });
-  await checkbox.scrollIntoViewIfNeeded();
-  await announceClick('Acknowledgment checkbox');
-  await checkbox.click();
-  console.log('Checked acknowledgment checkbox.');
-  await sleep(2000);
-
-  const confirmPledgeBtn = page.locator('button[type="submit"]').filter({ hasText: /confirm pledge/i });
-  await confirmPledgeBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await confirmPledgeBtn.scrollIntoViewIfNeeded();
-  await announceClick('Confirm Pledge');
-  await confirmPledgeBtn.click();
-  console.log('Clicked "Confirm Pledge" button.');
-  await sleep(3000);
-
-  console.log('Waiting for MetaMask popup…');
-  let mmPage = await findMetaMaskPage(context);
-  if (mmPage) {
-    await mmPage.bringToFront();
-    await sleep(2000);
-
-    const passwordField = mmPage.locator('input[type="password"]');
-    const isLocked = await passwordField.isVisible({ timeout: 5_000 }).catch(() => false);
-
-    if (isLocked) {
-      console.log('MetaMask is locked. Entering password…');
-      await passwordField.click();
-      for (const char of MM_PASSWORD) {
-        await mmPage.keyboard.type(char, { delay: 60 + Math.floor(Math.random() * 80) });
-      }
-      await sleep(500);
-
-      const unlockBtn = mmPage.locator('button[data-testid="unlock-submit"]');
-      await unlockBtn.waitFor({ state: 'visible', timeout: 10_000 });
-      await announceClick('Unlock');
-      await unlockBtn.click();
-      console.log('Clicked "Unlock" button.');
-      await sleep(3000);
-
-      mmPage = await findMetaMaskPage(context);
-      if (mmPage) {
-        await mmPage.bringToFront();
-        await sleep(2000);
-      }
-    }
-
-    const confirmBtn1 = mmPage.locator('button[data-testid="confirm-footer-button"]');
-    await confirmBtn1.waitFor({ state: 'visible', timeout: 15_000 });
-    await announceClick('Confirm (MetaMask)');
-    await confirmBtn1.click();
-    console.log('Clicked first MetaMask "Confirm" button.');
-    await sleep(5000);
-
-    console.log('Waiting for second MetaMask confirmation popup…');
-    mmPage = await findMetaMaskPage(context);
-    if (mmPage) {
-      await mmPage.bringToFront();
-      await sleep(2000);
-      const confirmBtn2 = mmPage.locator('button[data-testid="confirm-footer-button"]');
-      await confirmBtn2.waitFor({ state: 'visible', timeout: 15_000 });
-      await announceClick('Confirm (MetaMask)');
-      await confirmBtn2.click();
-      console.log('Clicked second MetaMask "Confirm" button.');
-      await sleep(5000);
-    } else {
-      console.log('Second MetaMask popup not found.');
-    }
-  } else {
-    console.log('MetaMask popup not found.');
-  }
-
-  await page.bringToFront();
-  await sleep(3000);
-
-  const pledgeConfirmedModal = page.getByText('Pledge Confirmed');
-  await pledgeConfirmedModal.waitFor({ state: 'visible', timeout: 30_000 });
-  console.log('"Pledge Confirmed" modal appeared!');
-}
-
-/**
- * Campaign backer page: Back this Project → amount → Pledge → then checkout flow.
- */
-async function runPledgeFromCampaignDetail(page, context) {
-  const backBtn = page.getByRole('button', { name: /back this project/i });
-  await backBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await backBtn.scrollIntoViewIfNeeded();
-  await announceClick('Back this Project');
-  await backBtn.click();
-  console.log('Clicked "Back this Project" button.');
-  await sleep(3000);
-
-  await page.locator('body').click();
-  await sleep(500);
-  console.log('Scrolling to bottom of page…');
-  for (let i = 0; i < 15; i++) {
-    await page.keyboard.press('PageDown');
-    await sleep(800);
-    const atBottom = await page.evaluate(() =>
-      window.innerHeight + window.scrollY >= document.body.scrollHeight - 10
-    );
-    if (atBottom) break;
-  }
-  await sleep(2000);
-
-  const pledgeInput = page.locator('.css-137t7tx input.chakra-input[placeholder="0"]');
-  await pledgeInput.waitFor({ state: 'visible', timeout: 30_000 });
-  await pledgeInput.scrollIntoViewIfNeeded();
-  await pledgeInput.click({ clickCount: 3 });
-  await sleep(500);
-  await page.keyboard.press('Backspace');
-  await sleep(1000);
-  console.log('Entering pledge amount…');
-  const pledgeAmount = '0.1';
-  for (const char of pledgeAmount) {
-    await page.keyboard.type(char, { delay: 80 + Math.floor(Math.random() * 100) });
-  }
-  console.log('Pledge amount entered: 0.1.');
-
-  const pledgeBtn = page.locator('button[type="submit"]').filter({ hasText: /^pledge$/i });
-  await pledgeBtn.waitFor({ state: 'visible', timeout: 15_000 });
-  await pledgeBtn.scrollIntoViewIfNeeded();
-  await announceClick('Pledge');
-  await pledgeBtn.click();
-  console.log('Clicked "Pledge" button.');
-  await sleep(3000);
-
-  await runPledgeCheckoutFlow(page, context);
-}
-
 function extractProjectIdFromUrl(url) {
   const m = url.match(/projects\/([a-f0-9-]+)/);
   return m ? m[1] : null;
 }
 
-async function cryptoPledge(page, context, campaignTitle) {
-  console.log('\n--- Crypto Pledge ---\n');
+function pledgeNoRewardConfirmUrl(projectId) {
+  return `${HOME_URL}/backer/projects/${projectId}/pledge/no-reward/confirm?amount=${PLEDGE_AMOUNT}`;
+}
 
-  await goHomeSearchAndOpenCampaign(page, campaignTitle);
+async function goHomeSearchAndOpenCampaign(page, campaignTitle, step) {
+  await step('Navigate to Oak Network home', async () => {
+    await page.goto(HOME_URL, { waitUntil: 'load', timeout: 60_000 });
+    await sleep(3000);
+  });
+
+  await step(`Search for campaign "${campaignTitle}"`, async () => {
+    const searchInput = page.locator('input[name="searchString"]');
+    await searchInput.waitFor({ state: 'visible', timeout: 15_000 });
+    await searchInput.click({ clickCount: 3 });
+    await sleep(300);
+    await page.keyboard.press('Backspace');
+    await sleep(500);
+    await typeHumanLike(page, campaignTitle);
+    await sleep(3000);
+  });
+
+  await step('Click on the campaign card', async () => {
+    const campaignCard = page.locator('a').filter({ hasText: campaignTitle }).first();
+    await campaignCard.waitFor({ state: 'visible', timeout: 20_000 });
+    await campaignCard.click();
+    await page.waitForLoadState('load', { timeout: 60_000 }).catch(() => {});
+    await sleep(3000);
+  });
+}
+
+async function runPledgeFromCampaignDetail(page, context, step) {
+  await step('Click "Back this Project" button', async () => {
+    const backBtn = page.getByRole('button', { name: /back this project/i });
+    await backBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await backBtn.scrollIntoViewIfNeeded();
+    await backBtn.click();
+    await sleep(3000);
+  });
+
+  await step('Scroll pledge page to bottom', async () => {
+    await page.locator('body').click();
+    await sleep(500);
+    for (let i = 0; i < 15; i++) {
+      await page.keyboard.press('PageDown');
+      await sleep(800);
+      const atBottom = await page.evaluate(
+        () => window.innerHeight + window.scrollY >= document.body.scrollHeight - 10
+      );
+      if (atBottom) break;
+    }
+    await sleep(2000);
+  });
+
+  await step(`Enter pledge amount (${PLEDGE_AMOUNT})`, async () => {
+    const pledgeInput = page.locator('.css-137t7tx input.chakra-input[placeholder="0"]');
+    await pledgeInput.waitFor({ state: 'visible', timeout: 30_000 });
+    await pledgeInput.scrollIntoViewIfNeeded();
+    await pledgeInput.click({ clickCount: 3 });
+    await sleep(300);
+    await page.keyboard.press('Backspace');
+    await sleep(500);
+    await typeHumanLike(page, PLEDGE_AMOUNT);
+  });
+
+  await step('Click "Pledge" button', async () => {
+    const pledgeBtn = page.locator('button[type="submit"]').filter({ hasText: /^pledge$/i });
+    await pledgeBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await pledgeBtn.scrollIntoViewIfNeeded();
+    await pledgeBtn.click();
+    await sleep(3000);
+  });
+
+  await runPledgeCheckoutFlow(page, context, step);
+}
+
+async function runPledgeCheckoutFlow(page, context, step) {
+  await step('Click "Select payment method" dropdown', async () => {
+    const paymentDropdown = page.getByText('Select payment method');
+    await paymentDropdown.waitFor({ state: 'visible', timeout: 15_000 });
+    await paymentDropdown.scrollIntoViewIfNeeded();
+    await paymentDropdown.click();
+    await sleep(2000);
+  });
+
+  await step('Pick "Crypto Wallet" payment method', async () => {
+    const cryptoOption = page.getByText('Crypto Wallet');
+    await cryptoOption.waitFor({ state: 'visible', timeout: 10_000 });
+    await cryptoOption.click();
+    await sleep(2000);
+  });
+
+  await step('Check acknowledgment checkbox', async () => {
+    const checkbox = page.locator('svg[data-state="unchecked"]').first();
+    await checkbox.waitFor({ state: 'visible', timeout: 15_000 });
+    await checkbox.scrollIntoViewIfNeeded();
+    await checkbox.click();
+    await sleep(2000);
+  });
+
+  await step('Click "Confirm Pledge" button', async () => {
+    const confirmPledgeBtn = page.locator('button[type="submit"]').filter({ hasText: /confirm pledge/i });
+    await confirmPledgeBtn.waitFor({ state: 'visible', timeout: 15_000 });
+    await confirmPledgeBtn.scrollIntoViewIfNeeded();
+    await confirmPledgeBtn.click();
+    await sleep(3000);
+  });
+
+  await step('Unlock MetaMask if locked', async () => {
+    const mmPage = await findMetaMaskPage(context);
+    if (!mmPage) return;
+    await mmPage.bringToFront();
+    await sleep(2000);
+
+    const passwordField = mmPage.locator('input[type="password"]');
+    const isLocked = await passwordField.isVisible({ timeout: 5_000 }).catch(() => false);
+    if (!isLocked) return;
+
+    await passwordField.click();
+    for (const char of MM_PASSWORD) {
+      await mmPage.keyboard.type(char, { delay: 60 + Math.floor(Math.random() * 80) });
+    }
+    await sleep(500);
+    const unlockBtn = mmPage.locator('button[data-testid="unlock-submit"]');
+    await unlockBtn.waitFor({ state: 'visible', timeout: 10_000 });
+    await unlockBtn.click();
+    await sleep(3000);
+  });
+
+  await step('Click MetaMask "Confirm" (first pledge signature)', async () => {
+    const mmPage = await findMetaMaskPage(context);
+    if (!mmPage) throw new Error('MetaMask popup not found for first pledge confirmation.');
+    await mmPage.bringToFront();
+    await sleep(2000);
+    const confirmBtn1 = mmPage.locator('button[data-testid="confirm-footer-button"]');
+    await confirmBtn1.waitFor({ state: 'visible', timeout: 15_000 });
+    await confirmBtn1.click();
+    await sleep(5000);
+  });
+
+  await step('Click MetaMask "Confirm" (second pledge signature)', async () => {
+    const mmPage = await findMetaMaskPage(context);
+    if (!mmPage) return;
+    await mmPage.bringToFront();
+    await sleep(2000);
+    const confirmBtn2 = mmPage.locator('button[data-testid="confirm-footer-button"]');
+    const visible = await confirmBtn2.isVisible({ timeout: 15_000 }).catch(() => false);
+    if (!visible) return;
+    await confirmBtn2.click();
+    await sleep(5000);
+  });
+
+  await step('Wait for "Pledge Confirmed" modal', async () => {
+    await page.bringToFront();
+    await sleep(3000);
+    const pledgeConfirmedModal = page.getByText('Pledge Confirmed');
+    await pledgeConfirmedModal.waitFor({ state: 'visible', timeout: 30_000 });
+  });
+}
+
+async function cryptoPledge(page, context, campaignTitle, opts = {}) {
+  const step = resolveStep(opts);
+
+  await goHomeSearchAndOpenCampaign(page, campaignTitle, step);
   let projectId = extractProjectIdFromUrl(page.url());
 
-  let lastError;
-  let resumeFromConfirmUrlOnly = false;
+  await step('Complete pledge flow (with retries on transient failures)', async () => {
+    let lastError;
+    let resumeFromConfirmUrlOnly = false;
 
-  for (let attempt = 1; attempt <= MAX_PLEDGE_ATTEMPTS; attempt++) {
-    if (attempt > 1) {
-      console.log(`\nPledge attempt ${attempt - 1} did not complete. Retrying (${attempt}/${MAX_PLEDGE_ATTEMPTS})…\n`);
-      if (projectId) {
-        const confirmUrl = pledgeNoRewardConfirmUrl(projectId);
-        console.log(`Opening pledge confirm URL (no search): ${confirmUrl}`);
-        await page.goto(confirmUrl, { waitUntil: 'load', timeout: 60_000 });
-        await sleep(3000);
-        resumeFromConfirmUrlOnly = true;
-      } else {
-        await goHomeSearchAndOpenCampaign(page, campaignTitle);
-        projectId = extractProjectIdFromUrl(page.url());
-        resumeFromConfirmUrlOnly = false;
+    for (let attempt = 1; attempt <= MAX_PLEDGE_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        console.log(`Pledge retry ${attempt}/${MAX_PLEDGE_ATTEMPTS}…`);
+        if (projectId) {
+          await page.goto(pledgeNoRewardConfirmUrl(projectId), { waitUntil: 'load', timeout: 60_000 });
+          await sleep(3000);
+          resumeFromConfirmUrlOnly = true;
+        } else {
+          await goHomeSearchAndOpenCampaign(page, campaignTitle, step);
+          projectId = extractProjectIdFromUrl(page.url());
+          resumeFromConfirmUrlOnly = false;
+        }
+      }
+      try {
+        if (resumeFromConfirmUrlOnly) {
+          await runPledgeCheckoutFlow(page, context, step);
+        } else {
+          await runPledgeFromCampaignDetail(page, context, step);
+        }
+        lastError = null;
+        break;
+      } catch (err) {
+        lastError = err;
+        if (attempt === MAX_PLEDGE_ATTEMPTS) {
+          throw lastError;
+        }
       }
     }
-    try {
-      if (resumeFromConfirmUrlOnly) {
-        await runPledgeCheckoutFlow(page, context);
-      } else {
-        await runPledgeFromCampaignDetail(page, context);
-      }
-      lastError = null;
-      break;
-    } catch (err) {
-      lastError = err;
-      console.log(`Pledge attempt ${attempt} failed: ${err.message}`);
-      if (attempt === MAX_PLEDGE_ATTEMPTS) {
-        throw lastError;
-      }
-    }
-  }
+  });
 
-  const doneBtn = page.getByRole('button', { name: /^done$/i });
-  await doneBtn.waitFor({ state: 'visible', timeout: 10_000 });
-  await announceClick('Done');
-  const urlBeforeDone = page.url();
-  const projectIdMatch = urlBeforeDone.match(/projects\/([a-f0-9-]+)/);
+  await step('Click "Done" on pledge confirmation', async () => {
+    const doneBtn = page.getByRole('button', { name: /^done$/i });
+    await doneBtn.waitFor({ state: 'visible', timeout: 10_000 });
+    const urlBeforeDone = page.url();
+    const projectIdMatch = urlBeforeDone.match(/projects\/([a-f0-9-]+)/);
 
-  await doneBtn.click();
-  console.log('Clicked "Done" button. Pledge complete!');
-
-  await page.waitForURL(/\/backer\/projects\/[a-f0-9-]+$/, { timeout: 5_000 }).catch(() => {});
-  await sleep(3000);
-
-  const urlAfterDone = page.url();
-  if (urlAfterDone.includes('/confirm') || urlAfterDone.includes('/pledge')) {
-    if (projectIdMatch) {
-      const campaignPageUrl = `${HOME_URL}/backer/projects/${projectIdMatch[1]}`;
-      console.log('Done button did not redirect. Navigating manually…');
-      await page.goto(campaignPageUrl, { waitUntil: 'load', timeout: 60_000 });
-      await sleep(5000);
-    }
-  } else {
-    console.log(`Redirected to: ${urlAfterDone}`);
+    await doneBtn.click();
+    await page.waitForURL(/\/backer\/projects\/[a-f0-9-]+$/, { timeout: 5_000 }).catch(() => {});
     await sleep(3000);
-  }
 
-  const raisedText = await page.locator('.chakra-stack').filter({ hasText: /raised/i }).locator('p').first().textContent().catch(() => null);
-  if (raisedText) {
-    const raisedAmount = raisedText.replace('$', '').trim();
-    const pledgedAmount = '0.1';
-    if (raisedAmount === pledgedAmount) {
-      console.log(`Raised amount: $${raisedAmount} — matches pledged amount ($${pledgedAmount}).`);
+    const urlAfterDone = page.url();
+    if (urlAfterDone.includes('/confirm') || urlAfterDone.includes('/pledge')) {
+      if (projectIdMatch) {
+        await page.goto(`${HOME_URL}/backer/projects/${projectIdMatch[1]}`, {
+          waitUntil: 'load',
+          timeout: 60_000,
+        });
+        await sleep(5000);
+      }
     } else {
-      console.log(`Raised amount: $${raisedAmount} — does NOT match pledged amount ($${pledgedAmount}).`);
+      await sleep(3000);
     }
-  } else {
-    console.log('Could not read raised amount from the page.');
-  }
-  console.log(`On page: ${page.url()}`);
+  });
 
-  console.log('\n--- Crypto Pledge Complete ---\n');
+  await step(`Verify raised amount equals pledged amount ($${PLEDGE_AMOUNT})`, async () => {
+    const raisedText = await page
+      .locator('.chakra-stack')
+      .filter({ hasText: /raised/i })
+      .locator('p')
+      .first()
+      .textContent()
+      .catch(() => null);
+    if (!raisedText) {
+      throw new Error('Could not read raised amount from campaign page.');
+    }
+    const raisedAmount = raisedText.replace('$', '').trim();
+    if (raisedAmount !== PLEDGE_AMOUNT) {
+      throw new Error(`Raised amount $${raisedAmount} does not match pledged amount $${PLEDGE_AMOUNT}.`);
+    }
+  });
 }
 
 module.exports = { cryptoPledge };
