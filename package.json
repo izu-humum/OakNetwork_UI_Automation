@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "playwright test",
-    "test:flow": "playwright test tests/full_flow.spec.ts",
+    "test:flow": "playwright test tests/test_cases/full_flow.spec.ts",
     "test:report": "playwright show-report",
     "automation": "node scripts/run_automation.js",
     "create-campaign": "node scripts/run_automation.js --create-campaign",

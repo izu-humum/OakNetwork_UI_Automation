@@ -116,9 +116,10 @@ Same flow, but executed as a plain Node script. Every action is logged to the te
 │   ├── metamask_password.js  # MetaMask password (placeholder — fill in locally)
 │   └── admin_credentials.js  # Admin email/password (placeholder — fill in locally)
 ├── tests/
-│   ├── full_flow.spec.ts     # Full end-to-end flow as ordered tests
-│   ├── home.spec.ts          # Home page smoke tests
-│   └── my-projects.spec.ts   # My Projects page smoke tests
+│   └── test_cases/
+│       ├── full_flow.spec.ts     # Full end-to-end flow as ordered tests
+│       ├── home.spec.ts          # Home page smoke tests
+│       └── my-projects.spec.ts   # My Projects page smoke tests
 ├── playwright.config.ts      # Playwright test configuration
 ├── package.json
 └── .gitignore

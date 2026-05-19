@@ -17,11 +17,11 @@ import { test, expect } from '@playwright/test';
 import type { Browser, BrowserContext, Page } from '@playwright/test';
 
 // CommonJS helper modules.
-const { launchBrowserAndGetPage, closeBrowser } = require('../scripts/browser');
-const { runLogin } = require('../scripts/login');
-const { createCampaign } = require('../scripts/create_campaign');
-const { runAdmin } = require('../scripts/admin');
-const { cryptoPledge } = require('../scripts/crypto_pledge');
+const { launchBrowserAndGetPage, closeBrowser } = require('../../scripts/browser');
+const { runLogin } = require('../../scripts/login');
+const { createCampaign } = require('../../scripts/create_campaign');
+const { runAdmin } = require('../../scripts/admin');
+const { cryptoPledge } = require('../../scripts/crypto_pledge');
 
 type Launched = {
   launchKind: 'cdp' | 'bundled' | 'persistent';
