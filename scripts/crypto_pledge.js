@@ -12,7 +12,6 @@
 const { MM_PASSWORD } = require('./metamask_password');
 const { resolveStep } = require('./step');
 
-const HOME_URL = 'https://app-dev.oaknetwork.org';
 const MAX_PLEDGE_ATTEMPTS = 3;
 const PLEDGE_AMOUNT = '0.1';
 
@@ -54,13 +53,13 @@ function extractProjectIdFromUrl(url) {
   return m ? m[1] : null;
 }
 
-function pledgeNoRewardConfirmUrl(projectId) {
-  return `${HOME_URL}/backer/projects/${projectId}/pledge/no-reward/confirm?amount=${PLEDGE_AMOUNT}`;
+function pledgeNoRewardConfirmUrl(homeUrl, projectId) {
+  return `${homeUrl}/backer/projects/${projectId}/pledge/no-reward/confirm?amount=${PLEDGE_AMOUNT}`;
 }
 
-async function goHomeSearchAndOpenCampaign(page, campaignTitle, step) {
+async function goHomeSearchAndOpenCampaign(page, homeUrl, campaignTitle, step) {
   await step('Navigate to Oak Network home', async () => {
-    await page.goto(HOME_URL, { waitUntil: 'load', timeout: 60_000 });
+    await page.goto(homeUrl, { waitUntil: 'load', timeout: 60_000 });
     await sleep(3000);
   });
 
@@ -215,8 +214,12 @@ async function runPledgeCheckoutFlow(page, context, step) {
 
 async function cryptoPledge(page, context, campaignTitle, opts = {}) {
   const step = resolveStep(opts);
+  const homeUrl = opts.appHomeUrl;
+  if (!homeUrl) {
+    throw new Error('cryptoPledge: opts.appHomeUrl is required (pass the selected environment\'s app URL).');
+  }
 
-  await goHomeSearchAndOpenCampaign(page, campaignTitle, step);
+  await goHomeSearchAndOpenCampaign(page, homeUrl, campaignTitle, step);
   let projectId = extractProjectIdFromUrl(page.url());
 
   await step('Complete pledge flow (with retries on transient failures)', async () => {
@@ -227,11 +230,11 @@ async function cryptoPledge(page, context, campaignTitle, opts = {}) {
       if (attempt > 1) {
         console.log(`Pledge retry ${attempt}/${MAX_PLEDGE_ATTEMPTS}…`);
         if (projectId) {
-          await page.goto(pledgeNoRewardConfirmUrl(projectId), { waitUntil: 'load', timeout: 60_000 });
+          await page.goto(pledgeNoRewardConfirmUrl(homeUrl, projectId), { waitUntil: 'load', timeout: 60_000 });
           await sleep(3000);
           resumeFromConfirmUrlOnly = true;
         } else {
-          await goHomeSearchAndOpenCampaign(page, campaignTitle, step);
+          await goHomeSearchAndOpenCampaign(page, homeUrl, campaignTitle, step);
           projectId = extractProjectIdFromUrl(page.url());
           resumeFromConfirmUrlOnly = false;
         }
@@ -266,7 +269,7 @@ async function cryptoPledge(page, context, campaignTitle, opts = {}) {
     const urlAfterDone = page.url();
     if (urlAfterDone.includes('/confirm') || urlAfterDone.includes('/pledge')) {
       if (projectIdMatch) {
-        await page.goto(`${HOME_URL}/backer/projects/${projectIdMatch[1]}`, {
+        await page.goto(`${homeUrl}/backer/projects/${projectIdMatch[1]}`, {
           waitUntil: 'load',
           timeout: 60_000,
         });

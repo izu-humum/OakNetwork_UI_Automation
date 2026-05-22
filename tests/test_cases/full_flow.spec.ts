@@ -8,9 +8,11 @@
  *   npm run test:flow                  # run this file only
  *   npx playwright show-report         # open the HTML report
  *
- * Prerequisite: this file uses your real Chrome profile via CDP so
- * MetaMask is available. Make sure Chrome is closed (or already running
- * with --remote-debugging-port=9222) before starting.
+ * Before launching Chrome the test asks which environment to target
+ * (or reads `OAK_ENV` if set). For CI / non-interactive runs export
+ * the env var, e.g.:
+ *
+ *   OAK_ENV=stage npm run test:flow
  */
 
 import { test, expect } from '@playwright/test';
@@ -18,6 +20,7 @@ import type { Browser, BrowserContext, Page } from '@playwright/test';
 
 // CommonJS helper modules.
 const { launchBrowserAndGetPage, closeBrowser } = require('../../scripts/browser');
+const { selectEnvironment } = require('../../scripts/env_selector');
 const { runLogin } = require('../../scripts/login');
 const { createCampaign } = require('../../scripts/create_campaign');
 const { runAdmin } = require('../../scripts/admin');
@@ -30,13 +33,22 @@ type Launched = {
   page: Page;
 };
 
+type Environment = {
+  key: string;
+  label: string;
+  appUrl: string;
+  adminUrl: string;
+};
+
 let launched: Launched;
+let environment: Environment;
 let campaignTitle: string;
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Oak Network — full flow', () => {
   test.beforeAll(async () => {
+    environment = (await selectEnvironment()) as Environment;
     launched = (await launchBrowserAndGetPage()) as Launched;
 
     if (launched.context) {
@@ -65,6 +77,7 @@ test.describe('Oak Network — full flow', () => {
     test.setTimeout(5 * 60_000);
     await runLogin(launched.page, launched.context, {
       step: test.step.bind(test),
+      baseURL: environment.appUrl,
     });
     await expect(
       launched.page.locator('.chakra-avatar__root').first()
@@ -83,6 +96,8 @@ test.describe('Oak Network — full flow', () => {
     test.setTimeout(15 * 60_000);
     await runAdmin(launched.page, launched.context, campaignTitle, {
       step: test.step.bind(test),
+      adminUrl: environment.adminUrl,
+      appHomeUrl: environment.appUrl,
     });
   });
 
@@ -90,6 +105,7 @@ test.describe('Oak Network — full flow', () => {
     test.setTimeout(10 * 60_000);
     await cryptoPledge(launched.page, launched.context, campaignTitle, {
       step: test.step.bind(test),
+      appHomeUrl: environment.appUrl,
     });
   });
 });

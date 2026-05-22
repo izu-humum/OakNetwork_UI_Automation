@@ -54,6 +54,34 @@ const ADMIN_PASSWORD = 'your-admin-password';
 
 ## Usage
 
+### Environment selection
+
+Every run targets exactly one Oak Network deployment. Both the CLI runner and the Playwright tests ask you which environment to use before launching Chrome:
+
+```
+──────────────────────────────────────────────
+Where do you want to run this test?
+──────────────────────────────────────────────
+  1. dev      — Development
+     app:   https://app-dev.oaknetwork.org
+     admin: https://ccprotocol-minipay-admin-git-saclient-dev-crowdsplit.vercel.app/admin/login
+  2. stage    — Staging
+     app:   https://app-stage.oaknetwork.org
+     admin: https://app-admin-stage.oaknetwork.org/admin/login
+
+Enter number (1-2) or env name:
+```
+
+There is no default — you must pick one explicitly. For CI / non-interactive runs, set `OAK_ENV` (alias `staging` → `stage`, `development` → `dev`):
+
+```bash
+OAK_ENV=dev   npm run test:flow
+OAK_ENV=stage npm run test:flow
+OAK_ENV=stage npm run automation
+```
+
+The list of environments lives in `scripts/environments.js`. Add a new entry there to expose a new target — both the CLI runner and the tests pick it up automatically. Source of truth for URLs is the [Test Guidelines](https://ccprotocol.atlassian.net/wiki/spaces/CCPROTOCOL/pages/1037205505/Test+Guidelines).
+
 ### Run as Playwright tests (recommended — per-step pass/fail reports)
 
 ```bash
@@ -108,6 +136,8 @@ Same flow, but executed as a plain Node script. Every action is logged to the te
 ├── scripts/
 │   ├── step.js               # Pluggable step runner (console vs test.step)
 │   ├── browser.js            # Chrome lifecycle / CDP attach
+│   ├── environments.js       # Registry of envs (dev, stage, …) with URLs
+│   ├── env_selector.js       # Interactive prompt + OAK_ENV resolver
 │   ├── login.js              # MetaMask login flow (per-step)
 │   ├── create_campaign.js    # Campaign creation flow (per-step)
 │   ├── admin.js              # Admin approval flow (per-step)

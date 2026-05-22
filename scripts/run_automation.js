@@ -2,15 +2,19 @@
  * Standalone orchestrator — runs the full flow end-to-end with the
  * default console step runner (logs every action).
  *
+ * Before launching Chrome it asks the user which environment to run
+ * against (or reads `OAK_ENV` if set). The selected environment's
+ * URLs flow into login, admin, and crypto-pledge.
+ *
  * For pass/fail per-step reporting, prefer running the Playwright tests:
  *
- *     npm test                                 # all tests
- *     npx playwright test tests/full_flow.spec.ts   # full flow only
- *     npx playwright show-report               # HTML report with per-step results
+ *     npm run test:flow
+ *     npx playwright show-report
  */
 
 const { execSync } = require('child_process');
 const { launchBrowserAndGetPage, closeBrowser, CDP_PORT } = require('./browser');
+const { selectEnvironment } = require('./env_selector');
 const { runLogin } = require('./login');
 const { createCampaign } = require('./create_campaign');
 const { runAdmin } = require('./admin');
@@ -21,6 +25,8 @@ function sleep(ms) {
 }
 
 (async () => {
+  const env = await selectEnvironment();
+
   const { launchKind, browser, context, page } = await launchBrowserAndGetPage();
 
   async function closeBlankTabs() {
@@ -42,7 +48,7 @@ function sleep(ms) {
   try {
     await closeBlankTabs();
 
-    await runLogin(page, context);
+    await runLogin(page, context, { baseURL: env.appUrl });
 
     await closeBlankTabs();
     await sleep(2000);
@@ -52,8 +58,11 @@ function sleep(ms) {
     }
 
     const campaignTitle = await createCampaign(page, context);
-    await runAdmin(page, context, campaignTitle);
-    await cryptoPledge(page, context, campaignTitle);
+    await runAdmin(page, context, campaignTitle, {
+      adminUrl: env.adminUrl,
+      appHomeUrl: env.appUrl,
+    });
+    await cryptoPledge(page, context, campaignTitle, { appHomeUrl: env.appUrl });
 
     console.log('\nPress Enter in this terminal to close the browser…');
     process.stdin.setEncoding('utf8');

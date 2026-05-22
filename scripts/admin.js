@@ -12,9 +12,6 @@
 const { ADMIN_EMAIL, ADMIN_PASSWORD } = require('./admin_credentials');
 const { resolveStep } = require('./step');
 
-const ADMIN_URL = 'https://ccprotocol-minipay-admin-git-saclient-dev-crowdsplit.vercel.app/admin/login';
-const APP_HOME = 'https://app-dev.oaknetwork.org';
-
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -50,11 +47,19 @@ async function findMetaMaskPage(context) {
 
 async function runAdmin(page, context, campaignTitle, opts = {}) {
   const step = resolveStep(opts);
+  const adminUrl = opts.adminUrl;
+  const appHomeUrl = opts.appHomeUrl;
+  if (!adminUrl) {
+    throw new Error('runAdmin: opts.adminUrl is required (pass the selected environment\'s admin URL).');
+  }
+  if (!appHomeUrl) {
+    throw new Error('runAdmin: opts.appHomeUrl is required (pass the selected environment\'s app URL).');
+  }
 
   let adminPage;
   await step('Open admin panel in new tab', async () => {
     adminPage = await context.newPage();
-    await adminPage.goto(ADMIN_URL, { waitUntil: 'load', timeout: 60_000 });
+    await adminPage.goto(adminUrl, { waitUntil: 'load', timeout: 60_000 });
     await adminPage.bringToFront();
     await sleep(3000);
   });
@@ -162,9 +167,10 @@ async function runAdmin(page, context, campaignTitle, opts = {}) {
 
   let campaignTab;
   await step('Switch back to Oak Network campaign tab', async () => {
+    const appHost = new URL(appHomeUrl).host;
     const allPages = context.pages();
     campaignTab = allPages.find(
-      (p) => p.url().includes('app-dev.oaknetwork.org') || p.url().includes('oaknetwork')
+      (p) => p.url().includes(appHost) || p.url().includes('oaknetwork')
     );
     if (!campaignTab) throw new Error('Oak Network campaign tab not found.');
     await campaignTab.bringToFront();
@@ -234,7 +240,7 @@ async function runAdmin(page, context, campaignTitle, opts = {}) {
   });
 
   await step('Navigate back to Oak Network home', async () => {
-    await campaignTab.goto(APP_HOME, { waitUntil: 'load', timeout: 60_000 });
+    await campaignTab.goto(appHomeUrl, { waitUntil: 'load', timeout: 60_000 });
     await sleep(3000);
   });
 }
