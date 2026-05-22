@@ -68,16 +68,19 @@ Where do you want to run this test?
   2. stage    — Staging
      app:   https://app-stage.oaknetwork.org
      admin: https://app-admin-stage.oaknetwork.org/admin/login
+  3. prod     — Production
+     app:   https://app.oaknetwork.org
+     admin: https://app-admin.oaknetwork.org/admin/login
 
-Enter number (1-2) or env name:
+Enter number (1-3) or env name:
 ```
 
-There is no default — you must pick one explicitly. For CI / non-interactive runs, set `OAK_ENV` (alias `staging` → `stage`, `development` → `dev`):
+There is no default — you must pick one explicitly. For CI / non-interactive runs, set `OAK_ENV` (aliases: `staging` → `stage`, `development` → `dev`, `production`/`live` → `prod`):
 
 ```bash
 OAK_ENV=dev   npm run test:flow
 OAK_ENV=stage npm run test:flow
-OAK_ENV=stage npm run automation
+OAK_ENV=prod  npm run automation
 ```
 
 The list of environments lives in `scripts/environments.js`. Add a new entry there to expose a new target — both the CLI runner and the tests pick it up automatically. Source of truth for URLs is the [Test Guidelines](https://ccprotocol.atlassian.net/wiki/spaces/CCPROTOCOL/pages/1037205505/Test+Guidelines).

@@ -21,12 +21,19 @@ const ENVIRONMENTS = {
     appUrl: 'https://app-stage.oaknetwork.org',
     adminUrl: 'https://app-admin-stage.oaknetwork.org/admin/login',
   },
+  prod: {
+    label: 'Production',
+    appUrl: 'https://app.oaknetwork.org',
+    adminUrl: 'https://app-admin.oaknetwork.org/admin/login',
+  },
 };
 
 // Convenience aliases so e.g. OAK_ENV=staging works too.
 const ALIASES = {
   development: 'dev',
   staging: 'stage',
+  production: 'prod',
+  live: 'prod',
 };
 
 function normalizeKey(input) {
