@@ -132,6 +132,10 @@ Same flow, but executed as a plain Node script. Every action is logged to the te
 3. **Campaign Creation** — Navigates through all campaign form steps (Details → Items → Rewards → Story → Preview → Request Approval), filling fields with human-like typing and uploading images.
 4. **Cleanup** — On exit, kills the automation Chrome process and closes cleanly.
 
+## References
+
+- **[Test Guidelines (Confluence)](https://ccprotocol.atlassian.net/wiki/spaces/CCPROTOCOL/pages/1037205505/Test+Guidelines)** — canonical source for environment URLs (dev, staging, prod, etc.), test accounts, and the manual walkthrough steps this automation mirrors. Whenever you add or update an environment in `scripts/environments.js`, make sure its URLs match this doc.
+
 ## License
 
 ISC
